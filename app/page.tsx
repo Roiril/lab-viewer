@@ -1,7 +1,7 @@
 "use client";
 
-import React, { Suspense, useState, useEffect } from "react";
-import { Canvas } from "@react-three/fiber";
+import React, { Suspense, useState, useEffect, useRef } from "react";
+import { Canvas, ThreeEvent } from "@react-three/fiber";
 import {
   OrbitControls,
   useGLTF,
@@ -70,6 +70,7 @@ const ClickableFloor = ({
           onDragStart(); 
           onPositionUpdate(e.point);
         } else {
+          // 他のオブジェクトのクリックを妨げないよう、ここではstopPropagationしない
           onDeselect();
         }
       }}
@@ -87,7 +88,8 @@ const ClickableFloor = ({
       }}
     >
       <planeGeometry args={[100, 100]} />
-      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      {/* depthWrite={true} にして、raycastのターゲットになるようにする */}
+      <meshBasicMaterial transparent opacity={0} depthWrite={true} />
     </mesh>
   );
 };
@@ -98,24 +100,35 @@ const AnchorMarker = ({
   isSelected, 
   onSelect, 
   onDelete,
-  onUpdate
+  onUpdate,
+  onPositionChange,
+  onDragStart,
+  onDragEnd
 }: { 
   data: AnchorPoint; 
   isSelected: boolean; 
   onSelect: () => void; 
   onDelete: (id: string) => void;
-  onUpdate: (id: string, newLabel: string, newDescription: string) => void;
+  // update関数は位置情報も受け取るように変更
+  onUpdate: (id: string, newLabel: string, newDescription: string, newPosition: [number, number, number]) => void;
+  onPositionChange: (id: string, newPosition: THREE.Vector3) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(data.label);
   const [editDescription, setEditDescription] = useState(data.description || "");
+  const isDragging = useRef(false); // このマーカーがドラッグ中かどうかのref
 
   useEffect(() => {
     if (!isSelected) {
       setIsEditing(false);
+      // 選択が外れたらリセット
       setEditLabel(data.label);
       setEditDescription(data.description || "");
-    } else {
+    }
+    // dataが外部から更新されたら反映（ドラッグ中の更新は除く）
+    if (!isDragging.current) {
       setEditLabel(data.label);
       setEditDescription(data.description || "");
     }
@@ -127,7 +140,8 @@ const AnchorMarker = ({
         alert("意図は必須です");
         return;
     }
-    onUpdate(data.id, editLabel, editDescription);
+    // 現在の位置情報も一緒に保存
+    onUpdate(data.id, editLabel, editDescription, data.position);
     setIsEditing(false);
   };
 
@@ -141,10 +155,55 @@ const AnchorMarker = ({
     setIsEditing(true);
   };
 
+  // --- ドラッグ移動の実装 ---
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    if (!isSelected) {
+        onSelect();
+    }
+    // 編集モード中のみドラッグ可能にする
+    if (isSelected) {
+        isDragging.current = true;
+        onDragStart(); // カメラ操作を無効化
+        // HTML側のポインターイベントをキャプチャして、カーソルが外れても追跡できるようにする
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (isDragging.current && isSelected) {
+      e.stopPropagation();
+      // raycasterを使って床との交点を求める
+      // 注意: scene内の他のオブジェクトを無視して床だけをターゲットにするため、
+      // ここでは簡易的にイベントの point を使用します。
+      // より厳密に行う場合は raycaster.intersectObjects を使います。
+      
+      // 床（ClickableFloor）はy=0にある前提。高さは固定。
+      const newPos = new THREE.Vector3(e.point.x, FIXED_HEIGHT, e.point.z);
+      onPositionChange(data.id, newPos);
+    }
+  };
+
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    if (isDragging.current) {
+        e.stopPropagation();
+        isDragging.current = false;
+        onDragEnd(); // カメラ操作を有効化
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    }
+  };
+
   return (
     <group position={data.position}>
       {/* 球体 */}
-      <mesh onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+      <mesh 
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        // ドラッグ中はカーソルを変更
+        onPointerOver={() => isSelected && (document.body.style.cursor = 'grab')}
+        onPointerOut={() => document.body.style.cursor = 'auto'}
+      >
         <sphereGeometry args={[0.2, 32, 32]} />
         <meshStandardMaterial
           color={isSelected ? "white" : data.color}
@@ -153,33 +212,31 @@ const AnchorMarker = ({
         />
       </mesh>
 
-      {/* 詳細UI (選択時のみ表示) */}
-      {isSelected && (
+      {/* 詳細UI (選択時のみ表示。ドラッグ中は隠す) */}
+      {isSelected && !isDragging.current && (
         <Html position={[0, 0.35, 0]} center distanceFactor={10} style={{ pointerEvents: 'auto' }} zIndexRange={[100, 0]}>
+          {/* ... (UIの中身は変更なし) ... */}
           <div 
             className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()} // UI上でのドラッグ開始を防ぐ
           >
-            {/* 修正点: 
-                - min-w を削除し、w-max と max-w で制御
-                - padding を p-2.5 に縮小
-                - max-w-[85vw] でスマホ画面端での見切れを軽減
-            */}
             <div className="relative flex flex-col items-center rounded-xl bg-slate-900/95 p-2.5 text-white shadow-2xl backdrop-blur-md border border-slate-700 w-max max-w-[85vw] sm:max-w-[260px]">
               
-              {/* 吹き出しの三角 */}
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-900/95"></div>
 
               {isEditing ? (
-                // 編集モード
                 <div className="flex flex-col gap-2 w-full min-w-[200px]">
+                  {/* ドラッグ移動の案内を追加 */}
+                  <p className="text-[10px] text-blue-300 text-center font-bold mb-1">
+                    ● 球体をドラッグして位置を変更できます
+                  </p>
                   <div>
                     <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-0.5">名前</label>
                     <input
                       type="text"
                       value={editLabel}
                       onChange={(e) => setEditLabel(e.target.value)}
-                      onPointerDown={(e) => e.stopPropagation()} 
                       className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-600 focus:outline-none focus:border-blue-500"
                       placeholder="名前"
                     />
@@ -189,7 +246,6 @@ const AnchorMarker = ({
                     <textarea
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
-                      onPointerDown={(e) => e.stopPropagation()} 
                       className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-600 focus:outline-none focus:border-blue-500 min-h-[60px] resize-none leading-relaxed"
                       placeholder="意図を入力..."
                       autoFocus
@@ -198,7 +254,6 @@ const AnchorMarker = ({
                   <button 
                     onClick={handleUpdate} 
                     disabled={!editDescription.trim()}
-                    onPointerDown={(e) => e.stopPropagation()}
                     className="w-full py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white transition-colors flex items-center justify-center gap-1 mt-1"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -206,9 +261,7 @@ const AnchorMarker = ({
                   </button>
                 </div>
               ) : (
-                // 表示モード（コンパクト＆強調）
                 <div className="flex flex-col items-start w-full gap-2">
-                  {/* 名前 */}
                   <div className="flex items-center gap-1.5 w-full border-b border-slate-700/50 pb-1.5 mb-0.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-lime-400 shadow-[0_0_6px_rgba(163,230,53,0.5)] flex-shrink-0"></div>
                     <span className="text-xs font-medium text-slate-400 truncate max-w-[180px]">
@@ -216,18 +269,15 @@ const AnchorMarker = ({
                     </span>
                   </div>
 
-                  {/* 意図 (メイン) */}
                   <div className="w-full bg-slate-800/50 rounded p-2.5 border border-white/5">
                     <p className="text-xs sm:text-sm font-bold text-white whitespace-pre-wrap break-words leading-relaxed">
                       {data.description}
                     </p>
                   </div>
                   
-                  {/* 操作ボタン */}
                   <div className="flex items-center justify-end w-full gap-1 mt-0.5">
                     <button 
                       onClick={handleEditStart}
-                      onPointerDown={(e) => e.stopPropagation()}
                       className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded transition-colors"
                       title="編集"
                     >
@@ -235,7 +285,6 @@ const AnchorMarker = ({
                     </button>
                     <button 
                       onClick={handleDelete}
-                      onPointerDown={(e) => e.stopPropagation()}
                       className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
                       title="削除"
                     >
@@ -304,6 +353,7 @@ export default function IntentLayerPage() {
   // モード・選択状態
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [selectedAnchorId, setSelectedAnchorId] = useState<string | null>(null);
+  const [isDraggingAnchor, setIsDraggingAnchor] = useState(false); // アンカーをドラッグ中か
   
   // 入力用状態
   const [tempPosition, setTempPosition] = useState<[number, number, number] | null>(null);
@@ -331,13 +381,24 @@ export default function IntentLayerPage() {
     } catch (err) { console.error(err); }
   };
 
+  // 新規追加時の位置更新
   const handlePositionUpdate = (point: THREE.Vector3) => {
     setTempPosition([point.x, FIXED_HEIGHT, point.z]);
   };
 
+  // 既存アンカーのドラッグによる位置更新（表示のみ）
+  const handleAnchorPositionChange = (id: string, newPosition: THREE.Vector3) => {
+    setAnchors(prev => prev.map(a => 
+        a.id === id ? { ...a, position: [newPosition.x, FIXED_HEIGHT, newPosition.z] } : a
+    ));
+  };
+
+  // アンカーのドラッグ開始・終了（カメラ操作制御用）
+  const handleAnchorDragStart = () => setIsDraggingAnchor(true);
+  const handleAnchorDragEnd = () => setIsDraggingAnchor(false);
+
   const handleSave = async () => {
     if (!tempPosition || !newLabel || !newDescription) return;
-    
     try {
       setIsSaving(true);
       const newAnchor = {
@@ -392,21 +453,31 @@ export default function IntentLayerPage() {
     }
   };
 
-  const handleUpdate = async (id: string, label: string, description: string) => {
+  // 更新処理（位置情報も含む）
+  const handleUpdate = async (id: string, label: string, description: string, position: [number, number, number]) => {
     try {
       const { error } = await supabase
         .from('anchors')
-        .update({ label, description })
+        .update({ 
+            label, 
+            description,
+            position_x: position[0],
+            position_y: position[1],
+            position_z: position[2]
+        })
         .eq('id', id);
         
       if (error) throw error;
       
+      // ローカルのステートは handleAnchorPositionChange で更新済みだが、念のため同期
       setAnchors(anchors.map(a => 
-        a.id === id ? { ...a, label, description } : a
+        a.id === id ? { ...a, label, description, position } : a
       ));
     } catch (e) {
       console.error(e);
       alert("更新に失敗しました。ポリシーを確認してください。");
+      // エラー時は元の位置に戻すなどの処理が必要ならここに追加（今回は省略）
+      fetchAnchors(); 
     }
   };
 
@@ -423,7 +494,7 @@ export default function IntentLayerPage() {
       </div>
 
       {/* 3D Canvas */}
-      <Canvas shadows className={isAddingMode ? "cursor-move" : "cursor-default"}>
+      <Canvas shadows className={isAddingMode || isDraggingAnchor ? "cursor-move" : "cursor-default"}>
         <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={45} />
         <color attach="background" args={["#0a0a0c"]} />
         <ambientLight intensity={0.7} />
@@ -439,7 +510,7 @@ export default function IntentLayerPage() {
               onPositionUpdate={handlePositionUpdate}
               onDragStart={() => setShowInputForm(false)} 
               onDragEnd={() => setShowInputForm(true)}    
-              onDeselect={() => setSelectedAnchorId(null)}
+              onDeselect={() => !isDraggingAnchor && setSelectedAnchorId(null)}
             />
             
             {anchors.map((anchor) => (
@@ -450,6 +521,9 @@ export default function IntentLayerPage() {
                 onSelect={() => setSelectedAnchorId(anchor.id)}
                 onDelete={handleDelete}
                 onUpdate={handleUpdate}
+                onPositionChange={handleAnchorPositionChange}
+                onDragStart={handleAnchorDragStart}
+                onDragEnd={handleAnchorDragEnd}
               />
             ))}
 
@@ -464,7 +538,8 @@ export default function IntentLayerPage() {
           maxPolarAngle={Math.PI / 2 - 0.05}
           minDistance={2}
           maxDistance={30}
-          enabled={!isAddingMode} 
+          // 新規追加モード中、または既存アンカーをドラッグ中はカメラ操作を無効化
+          enabled={!isAddingMode && !isDraggingAnchor} 
         />
         <ContactShadows position={[0, -0.01, 0]} opacity={0.4} scale={30} blur={2} far={4} />
       </Canvas>
