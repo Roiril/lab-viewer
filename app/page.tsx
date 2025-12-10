@@ -407,7 +407,7 @@ export default function IntentLayerPage() {
     const currentPos = camera.position;
     const targetV = new THREE.Vector3(x, y, z);
     const direction = new THREE.Vector3().subVectors(currentPos, targetV).normalize();
-    const dist = 3.5;
+    const dist = 5;
     const newCamPos = targetV.clone().add(direction.multiplyScalar(dist));
     if (newCamPos.y < 1.0) newCamPos.y = 1.0;
 
