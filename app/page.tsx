@@ -80,8 +80,12 @@ const ClickableFloor = ({
       visible={true} 
       onPointerDown={(e) => {
         if (isActive) {
-          e.stopPropagation(); 
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          e.stopPropagation();
+          
+          // ★修正: e.target (Mesh) ではなく e.nativeEvent.target (DOM Canvas) をキャプチャ
+          const target = e.nativeEvent.target as HTMLElement;
+          target.setPointerCapture(e.pointerId);
+          
           isDragging.current = true;
           onDragStart(e.point);
         } else {
@@ -97,7 +101,13 @@ const ClickableFloor = ({
       onPointerUp={(e) => {
         if (isActive && isDragging.current) {
           e.stopPropagation();
-          (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+          
+          // ★修正: 解放も DOM 要素に対して行う
+          const target = e.nativeEvent.target as HTMLElement;
+          if (target.hasPointerCapture(e.pointerId)) {
+             target.releasePointerCapture(e.pointerId);
+          }
+          
           isDragging.current = false;
           onDragEnd();
         }
@@ -109,7 +119,7 @@ const ClickableFloor = ({
   );
 };
 
-// ★修正: 日本語入力バグ対応を行ったAnchorMarker
+// AnchorMarker
 const AnchorMarker = ({
   data,
   isSelected,
@@ -131,7 +141,6 @@ const AnchorMarker = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   
-  // ★修正1: useStateではなくuseRefで入力を管理（非制御コンポーネント化）
   const labelRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,7 +155,6 @@ const AnchorMarker = ({
 
   const handleUpdate = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // ★修正2: refから現在の値を取得
     const currentLabel = labelRef.current?.value || "";
     const currentDesc = descRef.current?.value || "";
 
@@ -182,6 +190,7 @@ const AnchorMarker = ({
           e.stopPropagation();
           if (!isRelocating) onSelect();
         }}
+        // ★修正: リロケート中は完全にレイキャストを無視させる（重要）
         raycast={isRelocating ? () => null : THREE.Mesh.prototype.raycast}
         onPointerOver={() => !isRelocating && isSelected && (document.body.style.cursor = 'pointer')}
         onPointerOut={() => document.body.style.cursor = 'auto'}
@@ -213,14 +222,12 @@ const AnchorMarker = ({
                 <div className="flex flex-col gap-2">
                   <p className="text-[9px] text-slate-400 text-center font-bold">内容を編集</p>
                   
-                  {/* ★修正3: value/onChangeを廃止し、defaultValue/refを使用 */}
                   <input
                     type="text"
                     ref={labelRef}
                     defaultValue={data.label}
                     onKeyDown={stopInputPropagation}
                     onKeyUp={stopInputPropagation}
-                    // キー入力時にCanvasへイベントを伝播させない
                     onPointerDown={stopInputPropagation}
                     className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500"
                     placeholder="名前"
@@ -267,12 +274,15 @@ const AnchorMarker = ({
           </div>
         </Html>
       )}
-      <mesh position={[0, -data.position[1] / 2, 0]}>
+      
+      {/* 以下のMeshもレイキャストをブロックしないように修正 */}
+      <mesh position={[0, -data.position[1] / 2, 0]} raycast={isRelocating ? () => null : undefined}>
         <cylinderGeometry args={[0.015, 0.015, data.position[1], 8]} />
         <meshBasicMaterial color={isRelocating ? "lime" : data.color} opacity={0.5} transparent />
       </mesh>
+      
       {isRelocating && (
-        <mesh position={[0, -data.position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -data.position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
           <ringGeometry args={[0.1, 0.25, 32]} />
           <meshBasicMaterial color="lime" side={THREE.DoubleSide} opacity={0.6} transparent />
         </mesh>
@@ -281,15 +291,17 @@ const AnchorMarker = ({
   );
 };
 
+// PreviewMarker: 新規配置中のマーカー
 const PreviewMarker = ({ position, isVisible }: { position: [number, number, number], isVisible: boolean }) => {
   if (!isVisible) return null;
   return (
     <group position={position}>
+      {/* ★修正: すべてのMeshに raycast={() => null} を適用し、床への判定を邪魔させない */}
       <mesh raycast={() => null}>
         <sphereGeometry args={[0.13, 32, 32]} />
         <meshStandardMaterial color="lime" emissive="lime" emissiveIntensity={0.8} />
       </mesh>
-      <mesh position={[0, -position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, -position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
         <ringGeometry args={[0.1, 0.25, 32]} />
         <meshBasicMaterial color="lime" side={THREE.DoubleSide} opacity={0.6} transparent />
       </mesh>
@@ -342,7 +354,7 @@ export default function IntentLayerPage() {
     if (isAddingMode || relocatingAnchorId) {
       if (controlsRef.current) {
         controlsRef.current.setLookAt(
-          0, 14, 6,
+          0, 20, 6,
           0, 0, 0,
           true
         );
@@ -521,7 +533,8 @@ export default function IntentLayerPage() {
   };
 
   return (
-    <div className="relative h-[100dvh] w-full bg-slate-950 text-white overflow-hidden touch-action-none select-none">
+    // ★修正: touchAction: "none" をスタイルに明示し、ブラウザのスクロール干渉を防止
+    <div className="relative h-[100dvh] w-full bg-slate-950 text-white overflow-hidden select-none" style={{ touchAction: "none" }}>
       <div className="absolute top-4 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <div className="flex items-center gap-4 bg-black/60 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl pointer-events-auto">
           <h1 className="text-lg font-bold tracking-tight text-white/90">Intent Layer</h1>
