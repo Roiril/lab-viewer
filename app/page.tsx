@@ -11,7 +11,18 @@ import {
   CameraControls,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { Loader2, Plus, X, Save, MapPin, Trash2, Edit2, Move, Scan, EyeOff } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  X,
+  Save,
+  MapPin,
+  Trash2,
+  Edit2,
+  Move,
+  Scan,
+  EyeOff,
+} from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 // --- Supabase ---
@@ -36,7 +47,8 @@ type AnchorPoint = {
 };
 
 // --- 定数 ---
-const DEFAULT_MODEL_URL = "https://jrwhqtiruhydherhwkqc.supabase.co/storage/v1/object/public/room-models/LabMesh.glb";
+const DEFAULT_MODEL_URL =
+  "https://jrwhqtiruhydherhwkqc.supabase.co/storage/v1/object/public/room-models/LabMesh.glb";
 const FIXED_HEIGHT = 1.5;
 
 // --- ヘルパー関数 ---
@@ -48,7 +60,6 @@ const stopInputPropagation = (e: React.SyntheticEvent) => {
 };
 
 // --- 3Dコンポーネント ---
-
 const RoomModel = ({ url }: { url: string }) => {
   const { scene } = useGLTF(url);
   return <primitive object={scene} scale={1.0} position={[0, 0, 0]} />;
@@ -61,7 +72,7 @@ const ClickableFloor = ({
   onDragStart,
   onDragMove,
   onDragEnd,
-  onDeselect
+  onDeselect,
 }: {
   isAddingMode: boolean;
   isRelocating: boolean;
@@ -77,15 +88,15 @@ const ClickableFloor = ({
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
       position={[0, 0, 0]}
-      visible={true} 
+      visible={true}
       onPointerDown={(e) => {
         if (isActive) {
           e.stopPropagation();
-          
-          // ★修正: e.target (Mesh) ではなく e.nativeEvent.target (DOM Canvas) をキャプチャ
+
+          // e.target (Mesh) ではなく e.nativeEvent.target (DOM Canvas) をキャプチャ
           const target = e.nativeEvent.target as HTMLElement;
           target.setPointerCapture(e.pointerId);
-          
+
           isDragging.current = true;
           onDragStart(e.point);
         } else {
@@ -101,20 +112,25 @@ const ClickableFloor = ({
       onPointerUp={(e) => {
         if (isActive && isDragging.current) {
           e.stopPropagation();
-          
-          // ★修正: 解放も DOM 要素に対して行う
+
+          // 解放も DOM 要素に対して行う
           const target = e.nativeEvent.target as HTMLElement;
           if (target.hasPointerCapture(e.pointerId)) {
-             target.releasePointerCapture(e.pointerId);
+            target.releasePointerCapture(e.pointerId);
           }
-          
+
           isDragging.current = false;
           onDragEnd();
         }
       }}
     >
       <planeGeometry args={[100, 100]} />
-      <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+      <meshBasicMaterial
+        transparent
+        opacity={0}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 };
@@ -128,19 +144,24 @@ const AnchorMarker = ({
   onDelete,
   onUpdate,
   onStartRelocation,
-  onEditingStateChange 
+  onEditingStateChange,
 }: {
   data: AnchorPoint;
   isSelected: boolean;
   isRelocating: boolean;
   onSelect: () => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, newLabel: string, newDescription: string, newPosition: [number, number, number]) => void;
+  onUpdate: (
+    id: string,
+    newLabel: string,
+    newDescription: string,
+    newPosition: [number, number, number]
+  ) => void;
   onStartRelocation: (id: string) => void;
   onEditingStateChange: (isEditing: boolean) => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  
+
   const labelRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
@@ -190,21 +211,29 @@ const AnchorMarker = ({
           e.stopPropagation();
           if (!isRelocating) onSelect();
         }}
-        // ★修正: リロケート中は完全にレイキャストを無視させる（重要）
+        // リロケート中は完全にレイキャストを無視
         raycast={isRelocating ? () => null : THREE.Mesh.prototype.raycast}
-        onPointerOver={() => !isRelocating && isSelected && (document.body.style.cursor = 'pointer')}
-        onPointerOut={() => document.body.style.cursor = 'auto'}
+        onPointerOver={() =>
+          !isRelocating && isSelected && (document.body.style.cursor = "pointer")
+        }
+        onPointerOut={() => (document.body.style.cursor = "auto")}
       >
         <sphereGeometry args={[0.13, 32, 32]} />
         <meshStandardMaterial
-          color={isRelocating ? "lime" : (isSelected ? "white" : data.color)}
-          emissive={isRelocating ? "lime" : (isSelected ? "white" : data.color)}
-          emissiveIntensity={isRelocating ? 0.8 : (isSelected ? 0.8 : 0.5)}
+          color={isRelocating ? "lime" : isSelected ? "white" : data.color}
+          emissive={isRelocating ? "lime" : isSelected ? "white" : data.color}
+          emissiveIntensity={isRelocating ? 0.8 : isSelected ? 0.8 : 0.5}
         />
       </mesh>
 
       {!isSelected && !isRelocating && (
-        <Html position={[0, 0.25, 0]} center distanceFactor={10} style={{ pointerEvents: 'none' }} zIndexRange={[0, 50]}>
+        <Html
+          position={[0, 0.25, 0]}
+          center
+          distanceFactor={10}
+          style={{ pointerEvents: "none" }}
+          zIndexRange={[0, 50]}
+        >
           <div className="flex justify-center">
             <div className="bg-black/40 backdrop-blur-[2px] px-2 py-0.5 rounded text-[10px] text-white/90 font-medium whitespace-nowrap border border-white/10 shadow-sm">
               {data.label}
@@ -214,14 +243,26 @@ const AnchorMarker = ({
       )}
 
       {isSelected && !isRelocating && (
-        <Html position={[0, 0.3, 0]} center distanceFactor={5} style={{ pointerEvents: 'auto' }} zIndexRange={[100, 0]}>
-          <div className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-200" onPointerDown={stopInputPropagation} onClick={stopInputPropagation}>
+        <Html
+          position={[0, 0.3, 0]}
+          center
+          distanceFactor={5}
+          style={{ pointerEvents: "auto" }}
+          zIndexRange={[100, 0]}
+        >
+          <div
+            className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-200"
+            onPointerDown={stopInputPropagation}
+            onClick={stopInputPropagation}
+          >
             <div className="relative flex flex-col rounded-lg bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-md border border-white/10 w-[220px]">
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-950/90"></div>
               {isEditing ? (
                 <div className="flex flex-col gap-2">
-                  <p className="text-[9px] text-slate-400 text-center font-bold">内容を編集</p>
-                  
+                  <p className="text-[9px] text-slate-400 text-center font-bold">
+                    内容を編集
+                  </p>
+
                   <input
                     type="text"
                     ref={labelRef}
@@ -232,7 +273,7 @@ const AnchorMarker = ({
                     className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500"
                     placeholder="名前"
                   />
-                  
+
                   <textarea
                     ref={descRef}
                     defaultValue={data.description}
@@ -242,9 +283,9 @@ const AnchorMarker = ({
                     className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500 min-h-[50px] resize-none"
                     placeholder="意図を入力..."
                   />
-                  
-                  <button 
-                    onClick={handleUpdate} 
+
+                  <button
+                    onClick={handleUpdate}
                     className="w-full py-1 bg-green-600 hover:bg-green-500 rounded text-white transition-colors flex items-center justify-center gap-1"
                   >
                     <Edit2 className="w-3 h-3" />
@@ -255,17 +296,34 @@ const AnchorMarker = ({
                 <div className="flex flex-col w-full">
                   <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-lime-400 shadow-[0_0_8px_rgba(163,230,53,0.6)] flex-shrink-0"></div>
-                    <span className="text-sm font-bold text-white truncate">{data.label}</span>
+                    <span className="text-sm font-bold text-white truncate">
+                      {data.label}
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-300 whitespace-pre-wrap break-words leading-5 mb-3">{data.description}</p>
+                  <p className="text-xs text-slate-300 whitespace-pre-wrap break-words leading-5 mb-3">
+                    {data.description}
+                  </p>
                   <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                    <button onPointerDown={handleRelocationStart} className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-slate-800 hover:bg-blue-600 text-[10px] text-slate-300 hover:text-white transition-colors cursor-grab active:cursor-grabbing">
+                    <button
+                      onPointerDown={handleRelocationStart}
+                      className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-slate-800 hover:bg-blue-600 text-[10px] text-slate-300 hover:text-white transition-colors cursor-grab active:cursor-grabbing"
+                    >
                       <Move className="w-3 h-3" />
                       <span>移動（長押し）</span>
                     </button>
                     <div className="flex items-center gap-1">
-                      <button onClick={handleEditStart} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-md"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button
+                        onClick={handleEditStart}
+                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-md"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -274,17 +332,33 @@ const AnchorMarker = ({
           </div>
         </Html>
       )}
-      
-      {/* 以下のMeshもレイキャストをブロックしないように修正 */}
-      <mesh position={[0, -data.position[1] / 2, 0]} raycast={isRelocating ? () => null : undefined}>
+
+      {/* リロケート中は床への判定を邪魔しない */}
+      <mesh
+        position={[0, -data.position[1] / 2, 0]}
+        raycast={isRelocating ? () => null : undefined}
+      >
         <cylinderGeometry args={[0.015, 0.015, data.position[1], 8]} />
-        <meshBasicMaterial color={isRelocating ? "lime" : data.color} opacity={0.5} transparent />
+        <meshBasicMaterial
+          color={isRelocating ? "lime" : data.color}
+          opacity={0.5}
+          transparent
+        />
       </mesh>
-      
+
       {isRelocating && (
-        <mesh position={[0, -data.position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <mesh
+          position={[0, -data.position[1] + 0.01, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          raycast={() => null}
+        >
           <ringGeometry args={[0.1, 0.25, 32]} />
-          <meshBasicMaterial color="lime" side={THREE.DoubleSide} opacity={0.6} transparent />
+          <meshBasicMaterial
+            color="lime"
+            side={THREE.DoubleSide}
+            opacity={0.6}
+            transparent
+          />
         </mesh>
       )}
     </group>
@@ -292,18 +366,33 @@ const AnchorMarker = ({
 };
 
 // PreviewMarker: 新規配置中のマーカー
-const PreviewMarker = ({ position, isVisible }: { position: [number, number, number], isVisible: boolean }) => {
+const PreviewMarker = ({
+  position,
+  isVisible,
+}: {
+  position: [number, number, number];
+  isVisible: boolean;
+}) => {
   if (!isVisible) return null;
   return (
     <group position={position}>
-      {/* ★修正: すべてのMeshに raycast={() => null} を適用し、床への判定を邪魔させない */}
+      {/* すべてのMeshに raycast={() => null} を適用し、床への判定を邪魔させない */}
       <mesh raycast={() => null}>
         <sphereGeometry args={[0.13, 32, 32]} />
         <meshStandardMaterial color="lime" emissive="lime" emissiveIntensity={0.8} />
       </mesh>
-      <mesh position={[0, -position[1] + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+      <mesh
+        position={[0, -position[1] + 0.01, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        raycast={() => null}
+      >
         <ringGeometry args={[0.1, 0.25, 32]} />
-        <meshBasicMaterial color="lime" side={THREE.DoubleSide} opacity={0.6} transparent />
+        <meshBasicMaterial
+          color="lime"
+          side={THREE.DoubleSide}
+          opacity={0.6}
+          transparent
+        />
       </mesh>
       <mesh position={[0, -position[1] / 2, 0]} raycast={() => null}>
         <cylinderGeometry args={[0.015, 0.015, position[1], 8]} />
@@ -334,47 +423,79 @@ export default function IntentLayerPage() {
 
   // 位置変更（リロケーション）モードの状態
   const [relocatingAnchorId, setRelocatingAnchorId] = useState<string | null>(null);
-  
+
   // 新規入力用状態
-  const [tempPosition, setTempPosition] = useState<[number, number, number] | null>(null);
+  const [tempPosition, setTempPosition] = useState<[number, number, number] | null>(
+    null
+  );
   const [showInputForm, setShowInputForm] = useState(false);
-  
+
   const [newLabel, setNewLabel] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const isComposing = useRef(false);
 
+  // スキャン開始時の再取得中フラグ
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const controlsRef = useRef<CameraControls>(null);
 
   useEffect(() => {
     fetchAnchors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (isAddingMode || relocatingAnchorId) {
       if (controlsRef.current) {
-        controlsRef.current.setLookAt(
-          0, 20, 6,
-          0, 0, 0,
-          true
-        );
+        controlsRef.current.setLookAt(0, 20, 6, 0, 0, 0, true);
       }
     }
   }, [isAddingMode, relocatingAnchorId]);
 
   const fetchAnchors = async () => {
     try {
-      const { data } = await supabase.from('anchors').select('*');
-      if (data) {
-        setAnchors(data.map((item: any) => ({
-          id: item.id,
-          position: [item.position_x, item.position_y, item.position_z],
-          label: item.label,
-          description: item.description,
-          color: item.color || 'orange'
-        })));
-      }
-    } catch (err) { console.error(err); }
+      const { data, error } = await supabase.from("anchors").select("*");
+      if (error) throw error;
+
+      const mapped: AnchorPoint[] = (data ?? []).map((item: any) => ({
+        id: item.id,
+        position: [item.position_x, item.position_y, item.position_z],
+        label: item.label,
+        description: item.description,
+        color: item.color || "orange",
+      }));
+
+      setAnchors(mapped);
+
+      // 選択中のアンカーが消えてたら選択解除
+      setSelectedAnchorId((prev) =>
+        prev && mapped.some((a) => a.id === prev) ? prev : null
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // スキャンボタンの処理
+  // スキャンOFF→ONのときだけDBから最新取得して反映
+  // スキャンONのときはOFFにするだけ（更新だけはしない）
+  const handleScanButtonClick = async () => {
+    if (isRefreshing) return;
+
+    if (isScanning) {
+      setIsScanning(false);
+      setSelectedAnchorId(null);
+      return;
+    }
+
+    try {
+      setIsRefreshing(true);
+      await fetchAnchors();
+      setIsScanning(true);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleFloorDragStart = (point: THREE.Vector3) => {
@@ -384,21 +505,21 @@ export default function IntentLayerPage() {
       setTempPosition(newPos);
       setShowInputForm(false);
     } else if (relocatingAnchorId) {
-      setAnchors(prev => prev.map(a =>
-        a.id === relocatingAnchorId ? { ...a, position: newPos } : a
-      ));
+      setAnchors((prev) =>
+        prev.map((a) => (a.id === relocatingAnchorId ? { ...a, position: newPos } : a))
+      );
     }
   };
 
   const handleFloorDragMove = (point: THREE.Vector3) => {
     const newPos: [number, number, number] = [point.x, FIXED_HEIGHT, point.z];
-    
+
     if (isAddingMode) {
       setTempPosition(newPos);
     } else if (relocatingAnchorId) {
-      setAnchors(prev => prev.map(a =>
-        a.id === relocatingAnchorId ? { ...a, position: newPos } : a
-      ));
+      setAnchors((prev) =>
+        prev.map((a) => (a.id === relocatingAnchorId ? { ...a, position: newPos } : a))
+      );
     }
   };
 
@@ -423,15 +544,11 @@ export default function IntentLayerPage() {
     const newCamPos = targetV.clone().add(direction.multiplyScalar(dist));
     if (newCamPos.y < 1.0) newCamPos.y = 1.0;
 
-    controlsRef.current.setLookAt(
-      newCamPos.x, newCamPos.y, newCamPos.z,
-      x, y, z,
-      true
-    );
+    controlsRef.current.setLookAt(newCamPos.x, newCamPos.y, newCamPos.z, x, y, z, true);
   };
 
   const startRelocation = (id: string) => {
-    const anchor = anchors.find(a => a.id === id);
+    const anchor = anchors.find((a) => a.id === id);
     if (anchor) {
       setRelocatingAnchorId(id);
       setSelectedAnchorId(null);
@@ -441,8 +558,8 @@ export default function IntentLayerPage() {
   const confirmRelocation = async () => {
     const idToUpdate = relocatingAnchorId;
     if (!idToUpdate) return;
-      
-    const anchor = anchors.find(a => a.id === idToUpdate);
+
+    const anchor = anchors.find((a) => a.id === idToUpdate);
     if (!anchor) return;
 
     setRelocatingAnchorId(null);
@@ -450,13 +567,13 @@ export default function IntentLayerPage() {
     try {
       setIsSaving(true);
       const { error } = await supabase
-        .from('anchors')
+        .from("anchors")
         .update({
           position_x: anchor.position[0],
           position_y: anchor.position[1],
-          position_z: anchor.position[2]
+          position_z: anchor.position[2],
         })
-        .eq('id', idToUpdate);
+        .eq("id", idToUpdate);
       if (error) throw error;
     } catch (e) {
       console.error(e);
@@ -473,21 +590,24 @@ export default function IntentLayerPage() {
       const newAnchor = {
         label: newLabel,
         description: newDescription,
-        color: 'lime',
+        color: "lime",
         position_x: tempPosition[0],
         position_y: tempPosition[1],
-        position_z: tempPosition[2]
+        position_z: tempPosition[2],
       };
-      const { data, error } = await supabase.from('anchors').insert([newAnchor]).select();
+      const { data, error } = await supabase.from("anchors").insert([newAnchor]).select();
       if (error) throw error;
       if (data) {
-        setAnchors([...anchors, {
-          id: data[0].id,
-          position: [data[0].position_x, data[0].position_y, data[0].position_z],
-          label: data[0].label,
-          description: data[0].description,
-          color: data[0].color
-        }]);
+        setAnchors((prev) => [
+          ...prev,
+          {
+            id: data[0].id,
+            position: [data[0].position_x, data[0].position_y, data[0].position_z],
+            label: data[0].label,
+            description: data[0].description,
+            color: data[0].color,
+          },
+        ]);
       }
       resetAddMode();
       setIsScanning(true);
@@ -507,24 +627,43 @@ export default function IntentLayerPage() {
     setNewDescription("");
   };
 
+  // ★修正: anchors 参照を避ける（関数型更新）+ エラーを握りつぶさず error を見る
   const handleDelete = async (id: string) => {
     if (!confirm("この意図を削除しますか？")) return;
+
     try {
-      const { error } = await supabase.from('anchors').delete().eq('id', id);
-      if (error) throw error;
-      setAnchors(anchors.filter(a => a.id !== id));
+      const { error } = await supabase.from("anchors").delete().eq("id", id);
+
+      if (error) {
+        console.error("Supabase delete error:", error);
+        alert("削除に失敗しました: " + error.message);
+        return;
+      }
+
+      setAnchors((prev) => prev.filter((a) => a.id !== id));
       setSelectedAnchorId(null);
     } catch (e) {
-      console.error(e);
+      console.error("Unexpected delete error:", e);
       alert("削除に失敗しました。");
     }
   };
 
-  const handleUpdateContent = async (id: string, label: string, description: string, position: [number, number, number]) => {
+  const handleUpdateContent = async (
+    id: string,
+    label: string,
+    description: string,
+    position: [number, number, number]
+  ) => {
     try {
-      const { error } = await supabase.from('anchors').update({ label, description }).eq('id', id);
+      const { error } = await supabase
+        .from("anchors")
+        .update({ label, description })
+        .eq("id", id);
       if (error) throw error;
-      setAnchors(anchors.map(a => a.id === id ? { ...a, label, description, position } : a));
+
+      setAnchors((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, label, description, position } : a))
+      );
     } catch (e) {
       console.error(e);
       alert("更新に失敗しました。");
@@ -533,27 +672,43 @@ export default function IntentLayerPage() {
   };
 
   return (
-    // ★修正: touchAction: "none" をスタイルに明示し、ブラウザのスクロール干渉を防止
-    <div className="relative h-[100dvh] w-full bg-slate-950 text-white overflow-hidden select-none" style={{ touchAction: "none" }}>
+    <div
+      className="relative h-[100dvh] w-full bg-slate-950 text-white overflow-hidden select-none"
+      style={{ touchAction: "none" }}
+    >
       <div className="absolute top-4 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <div className="flex items-center gap-4 bg-black/60 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl pointer-events-auto">
           <h1 className="text-lg font-bold tracking-tight text-white/90">Intent Layer</h1>
           <div className="h-4 w-px bg-white/20" />
-          <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.5)]' : 'bg-slate-600'}`} />
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isScanning
+                ? "bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.5)]"
+                : "bg-slate-600"
+            }`}
+          />
         </div>
       </div>
 
-      <Canvas shadows className={isAddingMode || relocatingAnchorId ? "cursor-grabbing" : "cursor-default"}>
+      <Canvas
+        shadows
+        className={isAddingMode || relocatingAnchorId ? "cursor-grabbing" : "cursor-default"}
+      >
         <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={45} />
         <color attach="background" args={["#0a0a0c"]} />
         <ambientLight intensity={0.7} />
-        <directionalLight position={[10, 15, 10]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
+        <directionalLight
+          position={[10, 15, 10]}
+          intensity={1.2}
+          castShadow
+          shadow-mapSize={[2048, 2048]}
+        />
         <Environment preset="night" />
 
         <Suspense fallback={<Loader />}>
           <group>
             <RoomModel url={modelUrl} />
-            
+
             <ClickableFloor
               isAddingMode={isAddingMode}
               isRelocating={!!relocatingAnchorId}
@@ -565,28 +720,27 @@ export default function IntentLayerPage() {
               }}
             />
 
-            {isScanning && anchors.map((anchor) => (
-              <AnchorMarker
-                key={anchor.id}
-                data={anchor}
-                isSelected={selectedAnchorId === anchor.id}
-                isRelocating={relocatingAnchorId === anchor.id}
-                onSelect={() => {
-                  if (!relocatingAnchorId && !isAddingMode) {
-                    setSelectedAnchorId(anchor.id);
-                    focusOnAnchor(anchor.position);
-                  }
-                }}
-                onDelete={handleDelete}
-                onUpdate={handleUpdateContent}
-                onStartRelocation={startRelocation}
-                onEditingStateChange={setIsEditingAnchor} 
-              />
-            ))}
+            {isScanning &&
+              anchors.map((anchor) => (
+                <AnchorMarker
+                  key={anchor.id}
+                  data={anchor}
+                  isSelected={selectedAnchorId === anchor.id}
+                  isRelocating={relocatingAnchorId === anchor.id}
+                  onSelect={() => {
+                    if (!relocatingAnchorId && !isAddingMode) {
+                      setSelectedAnchorId(anchor.id);
+                      focusOnAnchor(anchor.position);
+                    }
+                  }}
+                  onDelete={handleDelete}
+                  onUpdate={handleUpdateContent}
+                  onStartRelocation={startRelocation}
+                  onEditingStateChange={setIsEditingAnchor}
+                />
+              ))}
 
-            {isAddingMode && tempPosition && (
-              <PreviewMarker position={tempPosition} isVisible={true} />
-            )}
+            {isAddingMode && tempPosition && <PreviewMarker position={tempPosition} isVisible={true} />}
           </group>
         </Suspense>
 
@@ -608,15 +762,24 @@ export default function IntentLayerPage() {
         <div className="absolute bottom-8 left-0 right-0 z-[100] flex justify-center pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-3 p-1.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/10 shadow-2xl">
             <button
-              onClick={() => setIsScanning(!isScanning)}
+              onClick={handleScanButtonClick}
+              disabled={isRefreshing}
               className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-all duration-300 ${
-                isScanning 
-                  ? "bg-teal-500 text-white shadow-[0_0_15px_rgba(20,184,166,0.5)] scale-105" 
+                isScanning
+                  ? "bg-teal-500 text-white shadow-[0_0_15px_rgba(20,184,166,0.5)] scale-105"
                   : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-white/5"
-              }`}
+              } ${isRefreshing ? "opacity-60 cursor-not-allowed" : ""}`}
             >
-              {isScanning ? <Scan className="w-5 h-5 animate-pulse" /> : <EyeOff className="w-5 h-5" />}
-              <span className="text-sm">{isScanning ? "スキャン中" : "スキャン"}</span>
+              {isRefreshing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isScanning ? (
+                <Scan className="w-5 h-5 animate-pulse" />
+              ) : (
+                <EyeOff className="w-5 h-5" />
+              )}
+              <span className="text-sm">
+                {isRefreshing ? "更新中" : isScanning ? "スキャン中" : "スキャン"}
+              </span>
             </button>
 
             <button
@@ -637,12 +800,11 @@ export default function IntentLayerPage() {
 
       {(isAddingMode || relocatingAnchorId) && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-end pb-8 pointer-events-none">
-          
           <button
             onClick={() => {
               if (relocatingAnchorId) {
                 setRelocatingAnchorId(null);
-                fetchAnchors(); 
+                fetchAnchors();
               } else {
                 resetAddMode();
               }
@@ -661,12 +823,18 @@ export default function IntentLayerPage() {
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wider">名前</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                    名前
+                  </label>
                   <input
                     autoFocus
                     type="text"
-                    onCompositionStart={() => { isComposing.current = true; }}
-                    onCompositionEnd={() => { isComposing.current = false; }}
+                    onCompositionStart={() => {
+                      isComposing.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                      isComposing.current = false;
+                    }}
                     onPointerDown={stopInputPropagation}
                     onKeyDown={(e) => !isComposing.current && stopInputPropagation(e)}
                     onKeyUp={stopInputPropagation}
@@ -676,10 +844,16 @@ export default function IntentLayerPage() {
                     onChange={(e) => setNewLabel(e.target.value)}
                   />
 
-                  <label className="block text-[10px] font-bold text-lime-400 mb-1.5 uppercase tracking-wider">意図 (必須)</label>
+                  <label className="block text-[10px] font-bold text-lime-400 mb-1.5 uppercase tracking-wider">
+                    意図 (必須)
+                  </label>
                   <textarea
-                    onCompositionStart={() => { isComposing.current = true; }}
-                    onCompositionEnd={() => { isComposing.current = false; }}
+                    onCompositionStart={() => {
+                      isComposing.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                      isComposing.current = false;
+                    }}
                     onPointerDown={stopInputPropagation}
                     onKeyDown={(e) => !isComposing.current && stopInputPropagation(e)}
                     onKeyUp={stopInputPropagation}
@@ -706,7 +880,11 @@ export default function IntentLayerPage() {
                     disabled={!newLabel || !newDescription || isSaving}
                     className="flex-[2] flex items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-900/20"
                   >
-                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    {isSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
                     保存する
                   </button>
                 </div>
@@ -717,8 +895,10 @@ export default function IntentLayerPage() {
               <div className="rounded-full bg-slate-900/80 px-6 py-3 text-white backdrop-blur-md border border-white/10 shadow-2xl animate-pulse">
                 <p className="flex items-center gap-2 font-bold text-xs">
                   <Move className="h-4 w-4 text-lime-400" />
-                  {isAddingMode 
-                    ? (tempPosition ? "ドラッグで移動 → 離して決定" : "画面をタッチ＆ドラッグして配置") 
+                  {isAddingMode
+                    ? tempPosition
+                      ? "ドラッグで移動 → 離して決定"
+                      : "画面をタッチ＆ドラッグして配置"
                     : "ドラッグで移動 → 離して決定"}
                 </p>
               </div>
