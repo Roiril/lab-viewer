@@ -1,419 +1,36 @@
 "use client";
 
-import React, { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import {
-  useGLTF,
   Environment,
-  Html,
   ContactShadows,
   PerspectiveCamera,
   CameraControls,
 } from "@react-three/drei";
 import * as THREE from "three";
-import {
-  Loader2,
-  Plus,
-  X,
-  Save,
-  MapPin,
-  Trash2,
-  Edit2,
-  Move,
-  Scan,
-  EyeOff,
-} from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
+import { Loader2, Plus, X, Save, MapPin, Move, Scan, EyeOff } from "lucide-react";
 
-// --- Supabase ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
-});
-
-// --- 型定義 ---
-type AnchorPoint = {
-  id: string;
-  position: [number, number, number];
-  label: string;
-  description: string;
-  color: string;
-};
-
-// --- 定数 ---
-const DEFAULT_MODEL_URL =
-  "https://jrwhqtiruhydherhwkqc.supabase.co/storage/v1/object/public/room-models/LabMesh.glb";
-const FIXED_HEIGHT = 1.5;
-
-// --- ヘルパー関数 ---
-const stopInputPropagation = (e: React.SyntheticEvent) => {
-  e.stopPropagation();
-  if (e.nativeEvent) {
-    e.nativeEvent.stopImmediatePropagation();
-  }
-};
-
-// --- 3Dコンポーネント ---
-const RoomModel = ({ url }: { url: string }) => {
-  const { scene } = useGLTF(url);
-  return <primitive object={scene} scale={1.0} position={[0, 0, 0]} />;
-};
-
-// 床コンポーネント
-const ClickableFloor = ({
-  isAddingMode,
-  isRelocating,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onDeselect,
-}: {
-  isAddingMode: boolean;
-  isRelocating: boolean;
-  onDragStart: (point: THREE.Vector3) => void;
-  onDragMove: (point: THREE.Vector3) => void;
-  onDragEnd: () => void;
-  onDeselect: () => void;
-}) => {
-  const isDragging = useRef(false);
-  const isActive = isAddingMode || isRelocating;
-
-  return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0, 0]}
-      visible={true}
-      onPointerDown={(e) => {
-        if (isActive) {
-          e.stopPropagation();
-
-          // e.target (Mesh) ではなく e.nativeEvent.target (DOM Canvas) をキャプチャ
-          const target = e.nativeEvent.target as HTMLElement;
-          target.setPointerCapture(e.pointerId);
-
-          isDragging.current = true;
-          onDragStart(e.point);
-        } else {
-          onDeselect();
-        }
-      }}
-      onPointerMove={(e) => {
-        if (isActive && isDragging.current) {
-          e.stopPropagation();
-          onDragMove(e.point);
-        }
-      }}
-      onPointerUp={(e) => {
-        if (isActive && isDragging.current) {
-          e.stopPropagation();
-
-          // 解放も DOM 要素に対して行う
-          const target = e.nativeEvent.target as HTMLElement;
-          if (target.hasPointerCapture(e.pointerId)) {
-            target.releasePointerCapture(e.pointerId);
-          }
-
-          isDragging.current = false;
-          onDragEnd();
-        }
-      }}
-    >
-      <planeGeometry args={[100, 100]} />
-      <meshBasicMaterial
-        transparent
-        opacity={0}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
-  );
-};
-
-// AnchorMarker
-const AnchorMarker = ({
-  data,
-  isSelected,
-  isRelocating,
-  onSelect,
-  onDelete,
-  onUpdate,
-  onStartRelocation,
-  onEditingStateChange,
-}: {
-  data: AnchorPoint;
-  isSelected: boolean;
-  isRelocating: boolean;
-  onSelect: () => void;
-  onDelete: (id: string) => void;
-  onUpdate: (
-    id: string,
-    newLabel: string,
-    newDescription: string,
-    newPosition: [number, number, number]
-  ) => void;
-  onStartRelocation: (id: string) => void;
-  onEditingStateChange: (isEditing: boolean) => void;
-}) => {
-  const [isEditing, setIsEditing] = useState(false);
-
-  const labelRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (!isSelected) {
-      if (isEditing) {
-        setIsEditing(false);
-        onEditingStateChange(false);
-      }
-    }
-  }, [isSelected, isEditing, onEditingStateChange]);
-
-  const handleUpdate = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const currentLabel = labelRef.current?.value || "";
-    const currentDesc = descRef.current?.value || "";
-
-    if (!currentDesc.trim()) {
-      alert("意図は必須です");
-      return;
-    }
-    onUpdate(data.id, currentLabel, currentDesc, data.position);
-    setIsEditing(false);
-    onEditingStateChange(false);
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDelete(data.id);
-  };
-
-  const handleEditStart = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditing(true);
-    onEditingStateChange(true);
-  };
-
-  const handleRelocationStart = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    onStartRelocation(data.id);
-  };
-
-  return (
-    <group position={data.position}>
-      <mesh
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!isRelocating) onSelect();
-        }}
-        // リロケート中は完全にレイキャストを無視
-        raycast={isRelocating ? () => null : THREE.Mesh.prototype.raycast}
-        onPointerOver={() =>
-          !isRelocating && isSelected && (document.body.style.cursor = "pointer")
-        }
-        onPointerOut={() => (document.body.style.cursor = "auto")}
-      >
-        <sphereGeometry args={[0.13, 32, 32]} />
-        <meshStandardMaterial
-          color={isRelocating ? "lime" : isSelected ? "white" : data.color}
-          emissive={isRelocating ? "lime" : isSelected ? "white" : data.color}
-          emissiveIntensity={isRelocating ? 0.8 : isSelected ? 0.8 : 0.5}
-        />
-      </mesh>
-
-      {!isSelected && !isRelocating && (
-        <Html
-          position={[0, 0.25, 0]}
-          center
-          distanceFactor={10}
-          style={{ pointerEvents: "none" }}
-          zIndexRange={[0, 50]}
-        >
-          <div className="flex justify-center">
-            <div className="bg-black/40 backdrop-blur-[2px] px-2 py-0.5 rounded text-[10px] text-white/90 font-medium whitespace-nowrap border border-white/10 shadow-sm">
-              {data.label}
-            </div>
-          </div>
-        </Html>
-      )}
-
-      {isSelected && !isRelocating && (
-        <Html
-          position={[0, 0.3, 0]}
-          center
-          distanceFactor={5}
-          style={{ pointerEvents: "auto" }}
-          zIndexRange={[100, 0]}
-        >
-          <div
-            className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-200"
-            onPointerDown={stopInputPropagation}
-            onClick={stopInputPropagation}
-          >
-            <div className="relative flex flex-col rounded-lg bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-md border border-white/10 w-[220px]">
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-950/90"></div>
-              {isEditing ? (
-                <div className="flex flex-col gap-2">
-                  <p className="text-[9px] text-slate-400 text-center font-bold">
-                    内容を編集
-                  </p>
-
-                  <input
-                    type="text"
-                    ref={labelRef}
-                    defaultValue={data.label}
-                    onKeyDown={stopInputPropagation}
-                    onKeyUp={stopInputPropagation}
-                    onPointerDown={stopInputPropagation}
-                    className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500"
-                    placeholder="名前"
-                  />
-
-                  <textarea
-                    ref={descRef}
-                    defaultValue={data.description}
-                    onKeyDown={stopInputPropagation}
-                    onKeyUp={stopInputPropagation}
-                    onPointerDown={stopInputPropagation}
-                    className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500 min-h-[50px] resize-none"
-                    placeholder="意図を入力..."
-                  />
-
-                  <button
-                    onClick={handleUpdate}
-                    className="w-full py-1 bg-green-600 hover:bg-green-500 rounded text-white transition-colors flex items-center justify-center gap-1"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                    <span className="text-[10px] font-bold">保存</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col w-full">
-                  <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-lime-400 shadow-[0_0_8px_rgba(163,230,53,0.6)] flex-shrink-0"></div>
-                    <span className="text-sm font-bold text-white truncate">
-                      {data.label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 whitespace-pre-wrap break-words leading-5 mb-3">
-                    {data.description}
-                  </p>
-                  <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                    <button
-                      onPointerDown={handleRelocationStart}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-slate-800 hover:bg-blue-600 text-[10px] text-slate-300 hover:text-white transition-colors cursor-grab active:cursor-grabbing"
-                    >
-                      <Move className="w-3 h-3" />
-                      <span>移動（長押し）</span>
-                    </button>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={handleEditStart}
-                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-md"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={handleDelete}
-                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </Html>
-      )}
-
-      {/* リロケート中は床への判定を邪魔しない */}
-      <mesh
-        position={[0, -data.position[1] / 2, 0]}
-        raycast={isRelocating ? () => null : undefined}
-      >
-        <cylinderGeometry args={[0.015, 0.015, data.position[1], 8]} />
-        <meshBasicMaterial
-          color={isRelocating ? "lime" : data.color}
-          opacity={0.5}
-          transparent
-        />
-      </mesh>
-
-      {isRelocating && (
-        <mesh
-          position={[0, -data.position[1] + 0.01, 0]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          raycast={() => null}
-        >
-          <ringGeometry args={[0.1, 0.25, 32]} />
-          <meshBasicMaterial
-            color="lime"
-            side={THREE.DoubleSide}
-            opacity={0.6}
-            transparent
-          />
-        </mesh>
-      )}
-    </group>
-  );
-};
-
-// PreviewMarker: 新規配置中のマーカー
-const PreviewMarker = ({
-  position,
-  isVisible,
-}: {
-  position: [number, number, number];
-  isVisible: boolean;
-}) => {
-  if (!isVisible) return null;
-  return (
-    <group position={position}>
-      {/* すべてのMeshに raycast={() => null} を適用し、床への判定を邪魔させない */}
-      <mesh raycast={() => null}>
-        <sphereGeometry args={[0.13, 32, 32]} />
-        <meshStandardMaterial color="lime" emissive="lime" emissiveIntensity={0.8} />
-      </mesh>
-      <mesh
-        position={[0, -position[1] + 0.01, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        raycast={() => null}
-      >
-        <ringGeometry args={[0.1, 0.25, 32]} />
-        <meshBasicMaterial
-          color="lime"
-          side={THREE.DoubleSide}
-          opacity={0.6}
-          transparent
-        />
-      </mesh>
-      <mesh position={[0, -position[1] / 2, 0]} raycast={() => null}>
-        <cylinderGeometry args={[0.015, 0.015, position[1], 8]} />
-        <meshBasicMaterial color="lime" opacity={0.6} transparent />
-      </mesh>
-    </group>
-  );
-};
-
-const Loader = () => (
-  <Html center>
-    <div className="flex flex-col items-center gap-2 text-white pointer-events-none">
-      <Loader2 className="h-8 w-8 animate-spin" />
-      <p className="text-sm font-medium">読み込み中...</p>
-    </div>
-  </Html>
-);
+import { RoomModel } from "@/components/3d/RoomModel";
+import { ClickableFloor } from "@/components/3d/ClickableFloor";
+import { AnchorMarker } from "@/components/3d/AnchorMarker";
+import { PreviewMarker } from "@/components/3d/PreviewMarker";
+import { Loader } from "@/components/ui/Loader";
+import { ErrorToast } from "@/components/ui/ErrorToast";
+import { useAnchors } from "@/hooks/useAnchors";
+import { DEFAULT_MODEL_URL, FIXED_HEIGHT } from "@/lib/constants";
+import type { AnchorPoint } from "@/types";
 
 export default function IntentLayerPage() {
   const [modelUrl] = useState(DEFAULT_MODEL_URL);
-  const [anchors, setAnchors] = useState<AnchorPoint[]>([]);
+  const {
+    anchors,
+    fetchAnchors,
+    createAnchor,
+    updateAnchor,
+    deleteAnchor,
+    setAnchors,
+  } = useAnchors();
 
   // モード管理
   const [isScanning, setIsScanning] = useState(false);
@@ -422,12 +39,13 @@ export default function IntentLayerPage() {
   const [isEditingAnchor, setIsEditingAnchor] = useState(false);
 
   // 位置変更（リロケーション）モードの状態
-  const [relocatingAnchorId, setRelocatingAnchorId] = useState<string | null>(null);
+  const [relocatingAnchorId, setRelocatingAnchorId] =
+    useState<string | null>(null);
 
   // 新規入力用状態
-  const [tempPosition, setTempPosition] = useState<[number, number, number] | null>(
-    null
-  );
+  const [tempPosition, setTempPosition] = useState<
+    [number, number, number] | null
+  >(null);
   const [showInputForm, setShowInputForm] = useState(false);
 
   const [newLabel, setNewLabel] = useState("");
@@ -438,10 +56,16 @@ export default function IntentLayerPage() {
   // スキャン開始時の再取得中フラグ
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // エラー表示用
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const controlsRef = useRef<CameraControls>(null);
 
   useEffect(() => {
-    fetchAnchors();
+    fetchAnchors().catch((err) => {
+      setErrorMessage("アンカーの読み込みに失敗しました");
+      console.error(err);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -453,33 +77,7 @@ export default function IntentLayerPage() {
     }
   }, [isAddingMode, relocatingAnchorId]);
 
-  const fetchAnchors = async () => {
-    try {
-      const { data, error } = await supabase.from("anchors").select("*");
-      if (error) throw error;
-
-      const mapped: AnchorPoint[] = (data ?? []).map((item: any) => ({
-        id: item.id,
-        position: [item.position_x, item.position_y, item.position_z],
-        label: item.label,
-        description: item.description,
-        color: item.color || "orange",
-      }));
-
-      setAnchors(mapped);
-
-      // 選択中のアンカーが消えてたら選択解除
-      setSelectedAnchorId((prev) =>
-        prev && mapped.some((a) => a.id === prev) ? prev : null
-      );
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // スキャンボタンの処理
-  // スキャンOFF→ONのときだけDBから最新取得して反映
-  // スキャンONのときはOFFにするだけ（更新だけはしない）
   const handleScanButtonClick = async () => {
     if (isRefreshing) return;
 
@@ -493,6 +91,9 @@ export default function IntentLayerPage() {
       setIsRefreshing(true);
       await fetchAnchors();
       setIsScanning(true);
+    } catch (err) {
+      setErrorMessage("アンカーの更新に失敗しました");
+      console.error(err);
     } finally {
       setIsRefreshing(false);
     }
@@ -506,7 +107,9 @@ export default function IntentLayerPage() {
       setShowInputForm(false);
     } else if (relocatingAnchorId) {
       setAnchors((prev) =>
-        prev.map((a) => (a.id === relocatingAnchorId ? { ...a, position: newPos } : a))
+        prev.map((a) =>
+          a.id === relocatingAnchorId ? { ...a, position: newPos } : a
+        )
       );
     }
   };
@@ -518,7 +121,9 @@ export default function IntentLayerPage() {
       setTempPosition(newPos);
     } else if (relocatingAnchorId) {
       setAnchors((prev) =>
-        prev.map((a) => (a.id === relocatingAnchorId ? { ...a, position: newPos } : a))
+        prev.map((a) =>
+          a.id === relocatingAnchorId ? { ...a, position: newPos } : a
+        )
       );
     }
   };
@@ -539,12 +144,22 @@ export default function IntentLayerPage() {
     const camera = controlsRef.current.camera;
     const currentPos = camera.position;
     const targetV = new THREE.Vector3(x, y, z);
-    const direction = new THREE.Vector3().subVectors(currentPos, targetV).normalize();
+    const direction = new THREE.Vector3()
+      .subVectors(currentPos, targetV)
+      .normalize();
     const dist = 5;
     const newCamPos = targetV.clone().add(direction.multiplyScalar(dist));
     if (newCamPos.y < 1.0) newCamPos.y = 1.0;
 
-    controlsRef.current.setLookAt(newCamPos.x, newCamPos.y, newCamPos.z, x, y, z, true);
+    controlsRef.current.setLookAt(
+      newCamPos.x,
+      newCamPos.y,
+      newCamPos.z,
+      x,
+      y,
+      z,
+      true
+    );
   };
 
   const startRelocation = (id: string) => {
@@ -566,18 +181,11 @@ export default function IntentLayerPage() {
 
     try {
       setIsSaving(true);
-      const { error } = await supabase
-        .from("anchors")
-        .update({
-          position_x: anchor.position[0],
-          position_y: anchor.position[1],
-          position_z: anchor.position[2],
-        })
-        .eq("id", idToUpdate);
-      if (error) throw error;
-    } catch (e) {
-      console.error(e);
-      alert("位置の更新に失敗しました。");
+      await updateAnchor(idToUpdate, { position: anchor.position });
+    } catch (err) {
+      setErrorMessage("位置の更新に失敗しました");
+      console.error(err);
+      await fetchAnchors();
     } finally {
       setIsSaving(false);
     }
@@ -587,33 +195,17 @@ export default function IntentLayerPage() {
     if (!tempPosition || !newLabel || !newDescription) return;
     try {
       setIsSaving(true);
-      const newAnchor = {
+      await createAnchor({
         label: newLabel,
         description: newDescription,
         color: "lime",
-        position_x: tempPosition[0],
-        position_y: tempPosition[1],
-        position_z: tempPosition[2],
-      };
-      const { data, error } = await supabase.from("anchors").insert([newAnchor]).select();
-      if (error) throw error;
-      if (data) {
-        setAnchors((prev) => [
-          ...prev,
-          {
-            id: data[0].id,
-            position: [data[0].position_x, data[0].position_y, data[0].position_z],
-            label: data[0].label,
-            description: data[0].description,
-            color: data[0].color,
-          },
-        ]);
-      }
+        position: tempPosition,
+      });
       resetAddMode();
       setIsScanning(true);
-    } catch (e) {
-      console.error(e);
-      alert("保存エラー: " + (e as any).message);
+    } catch (err) {
+      setErrorMessage("保存に失敗しました");
+      console.error(err);
     } finally {
       setIsSaving(false);
     }
@@ -627,24 +219,15 @@ export default function IntentLayerPage() {
     setNewDescription("");
   };
 
-  // ★修正: anchors 参照を避ける（関数型更新）+ エラーを握りつぶさず error を見る
   const handleDelete = async (id: string) => {
     if (!confirm("この意図を削除しますか？")) return;
 
     try {
-      const { error } = await supabase.from("anchors").delete().eq("id", id);
-
-      if (error) {
-        console.error("Supabase delete error:", error);
-        alert("削除に失敗しました: " + error.message);
-        return;
-      }
-
-      setAnchors((prev) => prev.filter((a) => a.id !== id));
+      await deleteAnchor(id);
       setSelectedAnchorId(null);
-    } catch (e) {
-      console.error("Unexpected delete error:", e);
-      alert("削除に失敗しました。");
+    } catch (err) {
+      setErrorMessage("削除に失敗しました");
+      console.error(err);
     }
   };
 
@@ -654,20 +237,24 @@ export default function IntentLayerPage() {
     description: string,
     position: [number, number, number]
   ) => {
-    try {
-      const { error } = await supabase
-        .from("anchors")
-        .update({ label, description })
-        .eq("id", id);
-      if (error) throw error;
+    if (!description.trim()) {
+      setErrorMessage("意図は必須です");
+      return;
+    }
 
-      setAnchors((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, label, description, position } : a))
-      );
-    } catch (e) {
-      console.error(e);
-      alert("更新に失敗しました。");
-      fetchAnchors();
+    try {
+      await updateAnchor(id, { label, description, position });
+    } catch (err) {
+      setErrorMessage("更新に失敗しました");
+      console.error(err);
+      await fetchAnchors();
+    }
+  };
+
+  const stopInputPropagation = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent) {
+      e.nativeEvent.stopImmediatePropagation();
     }
   };
 
@@ -676,9 +263,18 @@ export default function IntentLayerPage() {
       className="relative h-[100dvh] w-full bg-slate-950 text-white overflow-hidden select-none"
       style={{ touchAction: "none" }}
     >
+      {errorMessage && (
+        <ErrorToast
+          message={errorMessage}
+          onClose={() => setErrorMessage(null)}
+        />
+      )}
+
       <div className="absolute top-4 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <div className="flex items-center gap-4 bg-black/60 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 shadow-2xl pointer-events-auto">
-          <h1 className="text-lg font-bold tracking-tight text-white/90">Intent Layer</h1>
+          <h1 className="text-lg font-bold tracking-tight text-white/90">
+            Intent Layer
+          </h1>
           <div className="h-4 w-px bg-white/20" />
           <div
             className={`w-2 h-2 rounded-full ${
@@ -692,7 +288,9 @@ export default function IntentLayerPage() {
 
       <Canvas
         shadows
-        className={isAddingMode || relocatingAnchorId ? "cursor-grabbing" : "cursor-default"}
+        className={
+          isAddingMode || relocatingAnchorId ? "cursor-grabbing" : "cursor-default"
+        }
       >
         <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={45} />
         <color attach="background" args={["#0a0a0c"]} />
@@ -716,7 +314,8 @@ export default function IntentLayerPage() {
               onDragMove={handleFloorDragMove}
               onDragEnd={handleFloorDragEnd}
               onDeselect={() => {
-                if (!relocatingAnchorId && !isAddingMode) setSelectedAnchorId(null);
+                if (!relocatingAnchorId && !isAddingMode)
+                  setSelectedAnchorId(null);
               }}
             />
 
@@ -740,7 +339,9 @@ export default function IntentLayerPage() {
                 />
               ))}
 
-            {isAddingMode && tempPosition && <PreviewMarker position={tempPosition} isVisible={true} />}
+            {isAddingMode && tempPosition && (
+              <PreviewMarker position={tempPosition} isVisible={true} />
+            )}
           </group>
         </Suspense>
 
@@ -755,7 +356,13 @@ export default function IntentLayerPage() {
           truckSpeed={0.8}
           smoothTime={0.25}
         />
-        <ContactShadows position={[0, -0.01, 0]} opacity={0.4} scale={30} blur={2} far={4} />
+        <ContactShadows
+          position={[0, -0.01, 0]}
+          opacity={0.4}
+          scale={30}
+          blur={2}
+          far={4}
+        />
       </Canvas>
 
       {!isAddingMode && !relocatingAnchorId && (
@@ -804,7 +411,10 @@ export default function IntentLayerPage() {
             onClick={() => {
               if (relocatingAnchorId) {
                 setRelocatingAnchorId(null);
-                fetchAnchors();
+                fetchAnchors().catch((err) => {
+                  setErrorMessage("アンカーの読み込みに失敗しました");
+                  console.error(err);
+                });
               } else {
                 resetAddMode();
               }
@@ -836,7 +446,9 @@ export default function IntentLayerPage() {
                       isComposing.current = false;
                     }}
                     onPointerDown={stopInputPropagation}
-                    onKeyDown={(e) => !isComposing.current && stopInputPropagation(e)}
+                    onKeyDown={(e) =>
+                      !isComposing.current && stopInputPropagation(e)
+                    }
                     onKeyUp={stopInputPropagation}
                     className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none placeholder:text-slate-600 mb-2.5"
                     placeholder="名前を入力..."
@@ -855,7 +467,9 @@ export default function IntentLayerPage() {
                       isComposing.current = false;
                     }}
                     onPointerDown={stopInputPropagation}
-                    onKeyDown={(e) => !isComposing.current && stopInputPropagation(e)}
+                    onKeyDown={(e) =>
+                      !isComposing.current && stopInputPropagation(e)
+                    }
                     onKeyUp={stopInputPropagation}
                     className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none placeholder:text-slate-600 resize-none min-h-[60px]"
                     placeholder="周りの人に伝えたいことを入力, ex「集中してるので今はしゃべりかけないで」「作業中だけど雑談歓迎だよ」etc"
