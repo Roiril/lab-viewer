@@ -140,8 +140,8 @@ export const AnchorMarker = ({
             <div className="relative flex flex-col rounded-lg bg-slate-950/90 p-3 text-white shadow-2xl backdrop-blur-md border border-white/10 w-[220px]">
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-950/90"></div>
               {isEditing ? (
-                <div className="flex flex-col gap-2">
-                  <p className="text-[9px] text-slate-400 text-center font-bold">
+                <div className="flex flex-col gap-3">
+                  <p className="text-[11px] text-slate-400 text-center font-bold tracking-wider">
                     内容を編集
                   </p>
 
@@ -152,7 +152,7 @@ export const AnchorMarker = ({
                     onKeyDown={stopInputPropagation}
                     onKeyUp={stopInputPropagation}
                     onPointerDown={stopInputPropagation}
-                    className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm text-white border border-slate-700 focus:outline-none focus:border-blue-500"
                     placeholder="名前"
                   />
 
@@ -162,49 +162,51 @@ export const AnchorMarker = ({
                     onKeyDown={stopInputPropagation}
                     onKeyUp={stopInputPropagation}
                     onPointerDown={stopInputPropagation}
-                    className="w-full bg-slate-800 rounded px-2 py-1 text-xs text-white border border-slate-700 focus:outline-none focus:border-blue-500 min-h-[50px] resize-none"
+                    className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm text-white border border-slate-700 focus:outline-none focus:border-blue-500 min-h-[70px] resize-none"
                     placeholder="意図を入力..."
                   />
 
                   <button
                     onClick={handleUpdate}
-                    className="w-full py-1 bg-green-600 hover:bg-green-500 rounded text-white transition-colors flex items-center justify-center gap-1"
+                    className="w-full py-2.5 bg-green-600 hover:bg-green-500 rounded-lg text-white transition-all active:scale-95 flex items-center justify-center gap-2"
                   >
-                    <Edit2 className="w-3 h-3" />
-                    <span className="text-[10px] font-bold">保存</span>
+                    <Edit2 className="w-4 h-4" />
+                    <span className="text-xs font-bold">保存</span>
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col w-full">
-                  <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-lime-400 shadow-[0_0_8px_rgba(163,230,53,0.6)] flex-shrink-0"></div>
-                    <span className="text-sm font-bold text-white truncate">
+                  <div className="flex items-center gap-2.5 border-b border-white/10 pb-3 mb-3">
+                    <div className="w-2.5 h-2.5 rounded-full bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.6)] flex-shrink-0"></div>
+                    <span className="text-base font-bold text-white truncate">
                       {data.label}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 whitespace-pre-wrap break-words leading-5 mb-3">
+                  <p className="text-sm text-slate-300 whitespace-pre-wrap break-words leading-relaxed mb-4">
                     {data.description}
                   </p>
-                  <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                  <div className="flex items-center justify-between pt-2 border-t border-white/5">
                     <button
                       onPointerDown={handleRelocationStart}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-slate-800 hover:bg-blue-600 text-[10px] text-slate-300 hover:text-white transition-colors cursor-grab active:cursor-grabbing"
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-blue-600 text-[11px] text-slate-300 hover:text-white transition-all active:scale-95 cursor-grab active:cursor-grabbing"
                     >
-                      <Move className="w-3 h-3" />
-                      <span>移動（長押し）</span>
+                      <Move className="w-4 h-4" />
+                      <span className="font-bold">移動（長押し）</span>
                     </button>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={handleEditStart}
-                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-md"
+                        className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        title="編集"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-4.5 h-4.5" />
                       </button>
                       <button
                         onClick={handleDelete}
-                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md"
+                        className="p-2.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        title="削除"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4.5 h-4.5" />
                       </button>
                     </div>
                   </div>
